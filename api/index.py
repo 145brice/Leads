@@ -23,11 +23,13 @@ last_fetch_time = None
 def fetch_leads():
     """Fetch leads from Google Sheet"""
     try:
-        response = requests.get(SHEET_URL, timeout=10)
+        # Follow redirects and get the CSV data
+        response = requests.get(SHEET_URL, timeout=10, allow_redirects=True)
         response.raise_for_status()
         
         # Check if we got HTML instead of CSV (means sheet is not public)
-        if response.text.strip().startswith('<!DOCTYPE') or '<html' in response.text.lower():
+        content = response.text.strip()
+        if content.startswith('<!DOCTYPE') or content.startswith('<HTML') or '<html' in content.lower():
             print("ERROR: Google Sheet is not publicly accessible. Please share it with 'Anyone with the link can view'")
             return []
         
