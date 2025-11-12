@@ -4,3 +4,4 @@ Werkzeug==2.3.7
 
 # Note: Vercel's @vercel/python adapter handles Flask WSGI apps automatically
 # No serverless-wsgi needed
+# Trigger fresh deployment
