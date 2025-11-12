@@ -3,7 +3,6 @@ import requests
 import csv
 import io
 from datetime import datetime
-from collections import OrderedDict
 
 app = Flask(__name__)
 
@@ -879,4 +878,5 @@ def api_leads():
     })
 
 # Export handler for Vercel
+# Vercel's @vercel/python adapter automatically handles Flask WSGI apps
 handler = app
