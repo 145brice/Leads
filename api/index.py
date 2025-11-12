@@ -93,7 +93,8 @@ def get_unique_leads(leads):
 
 @app.route('/')
 def index():
-    return render_template_string('''
+    try:
+        return render_template_string('''
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -857,6 +858,9 @@ def index():
 </body>
 </html>
     ''')
+    except Exception as e:
+        import traceback
+        return f'<html><body><h1>Error</h1><pre>{str(e)}\n{traceback.format_exc()}</pre></body></html>', 500
 
 @app.route('/api/leads')
 def api_leads():
@@ -897,4 +901,11 @@ def api_leads():
 # Export handler for Vercel
 # Vercel's @vercel/python adapter automatically handles Flask WSGI apps
 # The handler must be the Flask app instance
-handler = app
+try:
+    handler = app
+except Exception as e:
+    # If app initialization fails, create a minimal error handler
+    def error_handler(request):
+        from flask import jsonify
+        return jsonify({'error': f'App initialization failed: {str(e)}'}), 500
+    handler = error_handler
