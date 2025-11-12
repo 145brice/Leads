@@ -3,7 +3,6 @@ import requests
 import csv
 import io
 from datetime import datetime
-from collections import OrderedDict
 
 app = Flask(__name__)
 
