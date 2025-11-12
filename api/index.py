@@ -9,7 +9,7 @@ import os
 app = Flask(__name__)
 
 # Configure for production
-app.config['ENV'] = os.environ.get('FLASK_ENV', 'production')
+# Note: ENV is deprecated in Flask 2.2+, using FLASK_ENV env var instead
 app.config['DEBUG'] = False
 
 # Google Sheet ID from the URL
@@ -888,4 +888,10 @@ def api_leads():
 # Export handler for Vercel
 # Vercel's @vercel/python adapter automatically handles Flask WSGI apps
 # The handler must be the Flask app instance
-handler = app
+try:
+    handler = app
+except Exception as e:
+    # Fallback error handler if app initialization fails
+    import sys
+    print(f"Error initializing Flask app: {e}", file=sys.stderr)
+    handler = app
