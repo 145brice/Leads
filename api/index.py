@@ -901,11 +901,4 @@ def api_leads():
 # Export handler for Vercel
 # Vercel's @vercel/python adapter automatically handles Flask WSGI apps
 # The handler must be the Flask app instance
-try:
-    handler = app
-except Exception as e:
-    # If app initialization fails, create a minimal error handler
-    def error_handler(request):
-        from flask import jsonify
-        return jsonify({'error': f'App initialization failed: {str(e)}'}), 500
-    handler = error_handler
+handler = app
