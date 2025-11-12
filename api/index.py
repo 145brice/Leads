@@ -860,30 +860,39 @@ def index():
 
 @app.route('/api/leads')
 def api_leads():
-    global last_leads, last_fetch_time
-    
-    current_leads = fetch_leads()
-    new_leads = get_new_leads(current_leads, last_leads)
-    
-    # Check if sheet is accessible
-    error_msg = None
-    if not current_leads:
-        try:
-            response = requests.get(SHEET_URL, timeout=10)
-            if response.text.strip().startswith('<!DOCTYPE') or '<html' in response.text.lower():
-                error_msg = "Google Sheet is not publicly accessible. Please share it with 'Anyone with the link can view'"
-        except:
-            error_msg = "Unable to access Google Sheet. Please check the sharing settings."
-    
-    last_leads = current_leads
-    last_fetch_time = datetime.now()
-    
-    return jsonify({
-        'leads': current_leads,
-        'new_leads_count': len(new_leads),
-        'timestamp': last_fetch_time.isoformat(),
-        'error': error_msg
-    })
+    try:
+        global last_leads, last_fetch_time
+        
+        current_leads = fetch_leads()
+        new_leads = get_new_leads(current_leads, last_leads)
+        
+        # Check if sheet is accessible
+        error_msg = None
+        if not current_leads:
+            try:
+                response = requests.get(SHEET_URL, timeout=10, allow_redirects=True)
+                if response.text.strip().startswith('<!DOCTYPE') or '<html' in response.text.lower():
+                    error_msg = "Google Sheet is not publicly accessible. Please share it with 'Anyone with the link can view'"
+            except Exception as e:
+                error_msg = f"Unable to access Google Sheet: {str(e)}"
+        
+        last_leads = current_leads
+        last_fetch_time = datetime.now()
+        
+        return jsonify({
+            'leads': current_leads,
+            'new_leads_count': len(new_leads),
+            'timestamp': last_fetch_time.isoformat(),
+            'error': error_msg
+        })
+    except Exception as e:
+        import traceback
+        return jsonify({
+            'leads': [],
+            'new_leads_count': 0,
+            'timestamp': datetime.now().isoformat(),
+            'error': f'Server error: {str(e)}'
+        }), 500
 
 # Export handler for Vercel
 # Vercel's @vercel/python adapter automatically handles Flask WSGI apps
