@@ -3,8 +3,14 @@ import requests
 import csv
 import io
 from datetime import datetime
+import os
 
+# Initialize Flask app
 app = Flask(__name__)
+
+# Configure for production
+app.config['ENV'] = os.environ.get('FLASK_ENV', 'production')
+app.config['DEBUG'] = False
 
 # Google Sheet ID from the URL
 SHEET_ID = "1PSj_fW0ppLk2OdaRDH4IBTkeXptfxYRL21wF66N7x48"
@@ -879,4 +885,5 @@ def api_leads():
 
 # Export handler for Vercel
 # Vercel's @vercel/python adapter automatically handles Flask WSGI apps
+# The handler must be the Flask app instance
 handler = app
