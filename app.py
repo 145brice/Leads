@@ -1,43 +1,91 @@
 from flask import Flask, render_template_string, jsonify
-import requests
-import csv
-import io
+import praw
+import os
 from datetime import datetime
 
 app = Flask(__name__)
 
-# Google Sheet ID from the URL
-SHEET_ID = "1PSj_fW0ppLk2OdaRDH4IBTkeXptfxYRL21wF66N7x48"
-SHEET_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid=0"
+# Reddit API credentials from environment variables
+REDDIT_CLIENT_ID = os.environ.get('REDDIT_CLIENT_ID', '')
+REDDIT_CLIENT_SECRET = os.environ.get('REDDIT_CLIENT_SECRET', '')
+REDDIT_USER_AGENT = os.environ.get('REDDIT_USER_AGENT', 'Live Leads Feed v1.0')
+
+# Configuration for what to search
+SUBREDDITS = os.environ.get('SUBREDDITS', 'all').split(',')  # Comma-separated list
+SEARCH_KEYWORDS = os.environ.get('SEARCH_KEYWORDS', '').split(',') if os.environ.get('SEARCH_KEYWORDS') else []
+POST_LIMIT = int(os.environ.get('POST_LIMIT', '50'))
 
 # Store last seen leads for detecting new ones
 last_leads = []
 last_fetch_time = None
 
-def fetch_leads():
-    """Fetch leads from Google Sheet"""
+def get_reddit_instance():
+    """Create and return a Reddit instance"""
     try:
-        response = requests.get(SHEET_URL, timeout=10)
-        response.raise_for_status()
-        
-        # Check if we got HTML instead of CSV (means sheet is not public)
-        if response.text.strip().startswith('<!DOCTYPE') or '<html' in response.text.lower():
-            print("ERROR: Google Sheet is not publicly accessible. Please share it with 'Anyone with the link can view'")
+        reddit = praw.Reddit(
+            client_id=REDDIT_CLIENT_ID,
+            client_secret=REDDIT_CLIENT_SECRET,
+            user_agent=REDDIT_USER_AGENT
+        )
+        return reddit
+    except Exception as e:
+        print(f"Error creating Reddit instance: {e}")
+        return None
+
+def fetch_leads():
+    """Fetch leads from Reddit using PRAW"""
+    try:
+        reddit = get_reddit_instance()
+        if not reddit:
             return []
         
-        # Parse CSV
-        csv_data = response.text
-        reader = csv.DictReader(io.StringIO(csv_data))
         leads = []
         
-        for row in reader:
-            # Clean up the row data
-            lead = {k.strip(): v.strip() if v else "" for k, v in row.items()}
-            # Only add leads that have at least one non-empty field
-            if any(v for v in lead.values()):
-                leads.append(lead)
+        # Fetch posts from specified subreddits
+        for subreddit_name in SUBREDDITS:
+            subreddit_name = subreddit_name.strip()
+            if not subreddit_name:
+                continue
+                
+            try:
+                subreddit = reddit.subreddit(subreddit_name)
+                
+                # If search keywords are specified, search for them
+                if SEARCH_KEYWORDS and SEARCH_KEYWORDS[0]:
+                    for keyword in SEARCH_KEYWORDS:
+                        keyword = keyword.strip()
+                        if not keyword:
+                            continue
+                        
+                        for submission in subreddit.search(keyword, limit=POST_LIMIT, sort='new'):
+                            lead = {
+                                'Username': str(submission.author) if submission.author else '[deleted]',
+                                'Subreddit': str(submission.subreddit),
+                                'Title': submission.title,
+                                'Link': f"https://reddit.com{submission.permalink}",
+                                'Score': str(submission.score),
+                                'Created': datetime.fromtimestamp(submission.created_utc).strftime('%Y-%m-%d %H:%M:%S')
+                            }
+                            leads.append(lead)
+                else:
+                    # Just get new posts from the subreddit
+                    for submission in subreddit.new(limit=POST_LIMIT):
+                        lead = {
+                            'Username': str(submission.author) if submission.author else '[deleted]',
+                            'Subreddit': str(submission.subreddit),
+                            'Title': submission.title,
+                            'Link': f"https://reddit.com{submission.permalink}",
+                            'Score': str(submission.score),
+                            'Created': datetime.fromtimestamp(submission.created_utc).strftime('%Y-%m-%d %H:%M:%S')
+                        }
+                        leads.append(lead)
+                        
+            except Exception as e:
+                print(f"Error fetching from r/{subreddit_name}: {e}")
+                continue
         
         return leads
+        
     except Exception as e:
         print(f"Error fetching leads: {e}")
         return []
@@ -68,10 +116,8 @@ def get_unique_leads(leads):
     unique = []
     
     for lead in leads:
-        # Get the first field value (which is the username)
-        keys = list(lead.keys())
-        username = keys[0] if keys else None
-        username_value = lead[username].strip() if username and lead[username] else None
+        # Get the username field
+        username_value = lead.get('Username', '').strip()
         
         # Use username as unique identifier
         if username_value and username_value not in seen:
@@ -91,7 +137,7 @@ def index():
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Live Leads Feed</title>
+    <title>Live Reddit Leads Feed</title>
     <style>
         * {
             margin: 0;
@@ -117,9 +163,9 @@ def index():
             width: 100%;
             height: 100%;
             background-image: 
-                radial-gradient(circle at 20% 50%, rgba(255, 215, 0, 0.1) 0%, transparent 50%),
-                radial-gradient(circle at 80% 80%, rgba(255, 215, 0, 0.08) 0%, transparent 50%),
-                radial-gradient(circle at 40% 20%, rgba(255, 215, 0, 0.06) 0%, transparent 50%);
+                radial-gradient(circle at 20% 50%, rgba(255, 69, 0, 0.1) 0%, transparent 50%),
+                radial-gradient(circle at 80% 80%, rgba(255, 69, 0, 0.08) 0%, transparent 50%),
+                radial-gradient(circle at 40% 20%, rgba(255, 69, 0, 0.06) 0%, transparent 50%);
             animation: pulse 8s ease-in-out infinite;
             pointer-events: none;
             z-index: 0;
@@ -147,11 +193,11 @@ def index():
         .header h1 {
             font-size: 3.5rem;
             font-weight: 700;
-            background: linear-gradient(135deg, #FFD700 0%, #FFA500 50%, #FFD700 100%);
+            background: linear-gradient(135deg, #FF4500 0%, #FF8C00 50%, #FF4500 100%);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
-            text-shadow: 0 0 40px rgba(255, 215, 0, 0.5);
+            text-shadow: 0 0 40px rgba(255, 69, 0, 0.5);
             margin-bottom: 10px;
             letter-spacing: -1px;
             animation: shimmer 3s ease-in-out infinite;
@@ -188,14 +234,14 @@ def index():
             letter-spacing: 1px;
             position: relative;
             overflow: hidden;
-            background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%);
-            color: #000;
-            box-shadow: 0 8px 25px rgba(255, 215, 0, 0.3);
+            background: linear-gradient(135deg, #FF4500 0%, #FF8C00 100%);
+            color: #fff;
+            box-shadow: 0 8px 25px rgba(255, 69, 0, 0.3);
         }
         
         .btn:hover {
             transform: translateY(-2px);
-            box-shadow: 0 12px 35px rgba(255, 215, 0, 0.5);
+            box-shadow: 0 12px 35px rgba(255, 69, 0, 0.5);
         }
         
         .btn:active {
@@ -203,7 +249,7 @@ def index():
         }
         
         .btn.active {
-            background: linear-gradient(135deg, #FFA500 0%, #FF8C00 100%);
+            background: linear-gradient(135deg, #FF8C00 0%, #FFA500 100%);
             box-shadow: 0 8px 25px rgba(255, 140, 0, 0.5);
         }
         
@@ -218,7 +264,7 @@ def index():
         .stat-card {
             background: rgba(255, 255, 255, 0.05);
             backdrop-filter: blur(10px);
-            border: 1px solid rgba(255, 215, 0, 0.2);
+            border: 1px solid rgba(255, 69, 0, 0.2);
             border-radius: 20px;
             padding: 20px 30px;
             text-align: center;
@@ -229,7 +275,7 @@ def index():
         .stat-value {
             font-size: 2.5rem;
             font-weight: 700;
-            color: #FFD700;
+            color: #FF4500;
             margin-bottom: 5px;
         }
         
@@ -243,10 +289,10 @@ def index():
         .feed-container {
             background: rgba(0, 0, 0, 0.4);
             backdrop-filter: blur(20px);
-            border: 1px solid rgba(255, 215, 0, 0.3);
+            border: 1px solid rgba(255, 69, 0, 0.3);
             border-radius: 25px;
             padding: 30px;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), inset 0 0 50px rgba(255, 215, 0, 0.05);
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), inset 0 0 50px rgba(255, 69, 0, 0.05);
             position: relative;
             overflow: hidden;
         }
@@ -258,7 +304,7 @@ def index():
             left: -100%;
             width: 100%;
             height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(255, 215, 0, 0.1), transparent);
+            background: linear-gradient(90deg, transparent, rgba(255, 69, 0, 0.1), transparent);
             animation: scan 3s infinite;
         }
         
@@ -273,23 +319,23 @@ def index():
             align-items: center;
             margin-bottom: 15px;
             padding-bottom: 15px;
-            border-bottom: 2px solid rgba(255, 215, 0, 0.3);
+            border-bottom: 2px solid rgba(255, 69, 0, 0.3);
         }
         
         .feed-column-headers {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            grid-template-columns: 150px 120px 1fr 80px 150px;
             gap: 15px;
             padding: 15px 20px;
-            background: rgba(255, 215, 0, 0.1);
-            border-bottom: 1px solid rgba(255, 215, 0, 0.3);
+            background: rgba(255, 69, 0, 0.1);
+            border-bottom: 1px solid rgba(255, 69, 0, 0.3);
             margin-bottom: 10px;
             border-radius: 8px;
         }
         
         .feed-column-header {
             font-size: 0.85rem;
-            color: #FFD700;
+            color: #FF4500;
             text-transform: uppercase;
             letter-spacing: 1.5px;
             font-weight: 700;
@@ -302,8 +348,8 @@ def index():
         }
         
         .feed-column-header:hover {
-            color: #FFA500;
-            text-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
+            color: #FF8C00;
+            text-shadow: 0 0 10px rgba(255, 69, 0, 0.5);
         }
         
         .feed-column-header.sort-asc::after {
@@ -321,7 +367,7 @@ def index():
         .feed-title {
             font-size: 1.5rem;
             font-weight: 600;
-            color: #FFD700;
+            color: #FF4500;
             text-transform: uppercase;
             letter-spacing: 2px;
         }
@@ -332,7 +378,7 @@ def index():
         }
         
         .refresh-indicator.active {
-            color: #FFD700;
+            color: #FF4500;
             animation: pulse-dot 1s infinite;
         }
         
@@ -357,13 +403,13 @@ def index():
         }
         
         #leadsFeed::-webkit-scrollbar-thumb {
-            background: linear-gradient(180deg, #FFD700, #FFA500);
+            background: linear-gradient(180deg, #FF4500, #FF8C00);
             border-radius: 10px;
         }
         
         .lead-item {
             background: rgba(255, 255, 255, 0.03);
-            border-left: 4px solid rgba(255, 215, 0, 0.5);
+            border-left: 4px solid rgba(255, 69, 0, 0.5);
             border-radius: 12px;
             padding: 20px;
             margin-bottom: 15px;
@@ -386,39 +432,40 @@ def index():
         
         .lead-item.new-lead {
             animation: flashIn 0.8s ease-out;
-            border-left-color: #FFD700;
-            box-shadow: 0 0 30px rgba(255, 215, 0, 0.5);
-            background: rgba(255, 215, 0, 0.1);
+            border-left-color: #FF4500;
+            box-shadow: 0 0 30px rgba(255, 69, 0, 0.5);
+            background: rgba(255, 69, 0, 0.1);
         }
         
         @keyframes flashIn {
             0% {
                 opacity: 0;
                 transform: translateX(-100px) scale(0.9);
-                box-shadow: 0 0 0 rgba(255, 215, 0, 0);
+                box-shadow: 0 0 0 rgba(255, 69, 0, 0);
             }
             50% {
-                box-shadow: 0 0 50px rgba(255, 215, 0, 0.8);
+                box-shadow: 0 0 50px rgba(255, 69, 0, 0.8);
                 transform: translateX(10px) scale(1.02);
             }
             100% {
                 opacity: 1;
                 transform: translateX(0) scale(1);
-                box-shadow: 0 0 30px rgba(255, 215, 0, 0.5);
+                box-shadow: 0 0 30px rgba(255, 69, 0, 0.5);
             }
         }
         
         .lead-item:hover {
             transform: translateX(5px);
-            border-left-color: #FFD700;
+            border-left-color: #FF4500;
             background: rgba(255, 255, 255, 0.05);
-            box-shadow: 0 5px 20px rgba(255, 215, 0, 0.2);
+            box-shadow: 0 5px 20px rgba(255, 69, 0, 0.2);
         }
         
         .lead-fields {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            grid-template-columns: 150px 120px 1fr 80px 150px;
             gap: 15px;
+            align-items: center;
         }
         
         .lead-field {
@@ -443,23 +490,23 @@ def index():
         }
         
         .lead-value.highlight {
-            color: #FFD700;
+            color: #FF4500;
             font-weight: 700;
         }
         
         .lead-value a {
-            color: #FFD700;
+            color: #FF4500;
             text-decoration: none;
-            border-bottom: 1px solid rgba(255, 215, 0, 0.5);
+            border-bottom: 1px solid rgba(255, 69, 0, 0.5);
             transition: all 0.2s ease;
             display: inline-block;
         }
         
         .lead-value a:hover {
-            color: #FFA500;
-            border-bottom-color: #FFD700;
+            color: #FF8C00;
+            border-bottom-color: #FF4500;
             transform: translateY(-1px);
-            text-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
+            text-shadow: 0 0 10px rgba(255, 69, 0, 0.5);
         }
         
         .empty-state {
@@ -475,7 +522,7 @@ def index():
             opacity: 0.3;
         }
         
-        .golden-particles {
+        .reddit-particles {
             position: fixed;
             top: 0;
             left: 0;
@@ -490,11 +537,11 @@ def index():
             position: absolute;
             width: 4px;
             height: 4px;
-            background: #FFD700;
+            background: #FF4500;
             border-radius: 50%;
             opacity: 0;
             animation: fall 3s linear infinite;
-            box-shadow: 0 0 10px #FFD700;
+            box-shadow: 0 0 10px #FF4500;
         }
         
         @keyframes fall {
@@ -513,19 +560,19 @@ def index():
                 font-size: 2.5rem;
             }
             
-            .lead-fields {
+            .lead-fields, .feed-column-headers {
                 grid-template-columns: 1fr;
             }
         }
     </style>
 </head>
 <body>
-    <div class="golden-particles" id="particles"></div>
+    <div class="reddit-particles" id="particles"></div>
     
     <div class="container">
         <div class="header">
-            <h1>💰 Live Leads Feed</h1>
-            <p>Real-time lead monitoring • Premium Edition</p>
+            <h1>🔴 Live Reddit Leads</h1>
+            <p>Real-time Reddit monitoring powered by PRAW</p>
         </div>
         
         <div class="controls">
@@ -535,11 +582,11 @@ def index():
         <div class="stats">
             <div class="stat-card">
                 <div class="stat-value" id="totalLeads">0</div>
-                <div class="stat-label">Total Leads</div>
+                <div class="stat-label">Total Posts</div>
             </div>
             <div class="stat-card">
                 <div class="stat-value" id="uniqueLeads">0</div>
-                <div class="stat-label">Unique Leads</div>
+                <div class="stat-label">Unique Users</div>
             </div>
             <div class="stat-card">
                 <div class="stat-value" id="newLeads">0</div>
@@ -554,9 +601,10 @@ def index():
             </div>
             <div class="feed-column-headers">
                 <div class="feed-column-header" data-sort="username">Username</div>
-                <div class="feed-column-header" data-sort="sub">Sub</div>
-                <div class="feed-column-header" data-sort="subject">Subject</div>
-                <div class="feed-column-header" data-sort="link">Link</div>
+                <div class="feed-column-header" data-sort="subreddit">Subreddit</div>
+                <div class="feed-column-header" data-sort="title">Title</div>
+                <div class="feed-column-header" data-sort="score">Score</div>
+                <div class="feed-column-header" data-sort="created">Created</div>
             </div>
             <div id="leadsFeed">
                 <div class="empty-state">
@@ -565,7 +613,7 @@ def index():
                         <line x1="12" y1="8" x2="12" y2="12"></line>
                         <line x1="12" y1="16" x2="12.01" y2="16"></line>
                     </svg>
-                    <p>Loading leads...</p>
+                    <p>Loading Reddit posts...</p>
                 </div>
             </div>
         </div>
@@ -576,9 +624,8 @@ def index():
         let currentLeads = [];
         let previousLeads = [];
         let sortColumn = null;
-        let sortDirection = 'asc'; // 'asc' or 'desc'
+        let sortDirection = 'asc';
         
-        // Create golden particles
         function createParticles() {
             const particlesContainer = document.getElementById('particles');
             for (let i = 0; i < 20; i++) {
@@ -591,60 +638,16 @@ def index():
             }
         }
         
-        function formatLead(lead) {
-            // Detect field types and assign headers
-            const fields = Object.entries(lead)
-                .filter(([key, value]) => value && value.trim())
-                .map(([key, value], index) => {
-                    let label = key;
-                    let displayValue = value.trim();
-                    let isUrl = false;
-                    let sortKey = null;
-                    
-                    // Detect if value is a URL
-                    if (displayValue.includes('http') || displayValue.includes('reddit.com')) {
-                        isUrl = true;
-                    }
-                    
-                    // Assign proper headers based on field position and content
-                    if (index === 0) {
-                        // First field is username
-                        label = 'Username';
-                        sortKey = 'username';
-                    } else if (index === 1 && !isUrl && displayValue.length < 50) {
-                        // Second field is usually subreddit
-                        label = 'Subreddit';
-                        sortKey = 'sub';
-                    } else if (isUrl) {
-                        // URL field
-                        label = 'Link';
-                        sortKey = 'link';
-                    } else if (key.includes('https://') || key.includes('reddit.com')) {
-                        // Field name itself is a URL pattern
-                        label = 'Link';
-                        isUrl = true;
-                        sortKey = 'link';
-                    } else {
-                        // Post title or other content
-                        label = key.length > 50 ? 'Post Title' : key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-                        sortKey = 'subject';
-                    }
-                    
-                    return {
-                        label: label,
-                        value: displayValue,
-                        isUrl: isUrl,
-                        sortKey: sortKey
-                    };
-                });
-            
-            return fields;
-        }
-        
         function getFieldValue(lead, sortKey) {
-            const fields = formatLead(lead);
-            const field = fields.find(f => f.sortKey === sortKey);
-            return field ? field.value.toLowerCase() : '';
+            const keyMap = {
+                'username': 'Username',
+                'subreddit': 'Subreddit',
+                'title': 'Title',
+                'score': 'Score',
+                'created': 'Created'
+            };
+            const actualKey = keyMap[sortKey] || sortKey;
+            return (lead[actualKey] || '').toString().toLowerCase();
         }
         
         function sortLeads(leads, column, direction) {
@@ -654,7 +657,13 @@ def index():
                 const aVal = getFieldValue(a, column);
                 const bVal = getFieldValue(b, column);
                 
-                // Compare values
+                // For score, compare as numbers
+                if (column === 'score') {
+                    const aNum = parseInt(aVal) || 0;
+                    const bNum = parseInt(bVal) || 0;
+                    return direction === 'asc' ? aNum - bNum : bNum - aNum;
+                }
+                
                 if (aVal < bVal) return direction === 'asc' ? -1 : 1;
                 if (aVal > bVal) return direction === 'asc' ? 1 : -1;
                 return 0;
@@ -677,53 +686,58 @@ def index():
             const feed = document.getElementById('leadsFeed');
             
             if (error) {
-                feed.innerHTML = `<div class="empty-state" style="color: #FFD700;"><p style="font-size: 1.2rem; margin-bottom: 10px;">⚠️ ${error}</p><p style="font-size: 0.9rem; color: rgba(255,255,255,0.7);">Make sure your Google Sheet is shared with "Anyone with the link can view"</p></div>`;
+                feed.innerHTML = `<div class="empty-state" style="color: #FF4500;"><p style="font-size: 1.2rem; margin-bottom: 10px;">⚠️ ${error}</p><p style="font-size: 0.9rem; color: rgba(255,255,255,0.7);">Please check your Reddit API credentials</p></div>`;
                 return;
             }
             
             if (leads.length === 0) {
-                feed.innerHTML = '<div class="empty-state"><p>No leads found</p></div>';
+                feed.innerHTML = '<div class="empty-state"><p>No posts found</p></div>';
                 return;
             }
             
-            // Apply sorting
             const sortedLeads = sortLeads(leads, sortColumn, sortDirection);
             
-            // Identify new leads
             const newLeadSignatures = new Set();
             if (isNewFetch && previousLeads.length > 0) {
                 previousLeads.forEach(lead => {
-                    const sig = JSON.stringify(lead);
-                    newLeadSignatures.add(sig);
+                    newLeadSignatures.add(JSON.stringify(lead));
                 });
             }
             
             feed.innerHTML = sortedLeads.map((lead, index) => {
-                const fields = formatLead(lead);
                 const leadSignature = JSON.stringify(lead);
                 const isNew = isNewFetch && !newLeadSignatures.has(leadSignature);
-                
-                if (isNew) {
-                    newLeadSignatures.add(leadSignature);
-                }
                 
                 return `
                     <div class="lead-item ${isNew ? 'new-lead' : ''}" data-index="${index}">
                         <div class="lead-fields">
-                            ${fields.map(field => `
-                                <div class="lead-field">
-                                    <div class="lead-label">${field.label}</div>
-                                    <div class="lead-value ${isNew ? 'highlight' : ''}">
-                                        ${field.isUrl ? `<a href="${field.value}" target="_blank" rel="noopener noreferrer">${field.value}</a>` : field.value}
-                                    </div>
+                            <div class="lead-field">
+                                <div class="lead-label">Username</div>
+                                <div class="lead-value ${isNew ? 'highlight' : ''}">${lead.Username || 'N/A'}</div>
+                            </div>
+                            <div class="lead-field">
+                                <div class="lead-label">Subreddit</div>
+                                <div class="lead-value ${isNew ? 'highlight' : ''}">r/${lead.Subreddit || 'N/A'}</div>
+                            </div>
+                            <div class="lead-field">
+                                <div class="lead-label">Title</div>
+                                <div class="lead-value ${isNew ? 'highlight' : ''}">${lead.Title || 'N/A'}</div>
+                            </div>
+                            <div class="lead-field">
+                                <div class="lead-label">Score</div>
+                                <div class="lead-value ${isNew ? 'highlight' : ''}">${lead.Score || '0'}</div>
+                            </div>
+                            <div class="lead-field">
+                                <div class="lead-label">Link</div>
+                                <div class="lead-value ${isNew ? 'highlight' : ''}">
+                                    <a href="${lead.Link}" target="_blank" rel="noopener noreferrer">View Post</a>
                                 </div>
-                            `).join('')}
+                            </div>
                         </div>
                     </div>
                 `;
             }).join('');
             
-            // Update stats
             document.getElementById('totalLeads').textContent = currentLeads.length;
             document.getElementById('uniqueLeads').textContent = getUniqueLeads(currentLeads).length;
             
@@ -738,17 +752,11 @@ def index():
             const unique = [];
             
             leads.forEach(lead => {
-                // Uniqueness based on username only
-                // Get the first field value (which is the username)
-                const keys = Object.keys(lead);
-                const username = keys.length > 0 ? (lead[keys[0]] || '').trim() : null;
-                
-                // Use username as the unique identifier
+                const username = (lead.Username || '').trim();
                 if (username && !seen.has(username)) {
                     seen.add(username);
                     unique.push(lead);
                 } else if (!username) {
-                    // If no username found, include it anyway
                     unique.push(lead);
                 }
             });
@@ -772,7 +780,7 @@ def index():
                 renderLeads(leadsToShow, true, data.error);
                 
                 if (data.error) {
-                    indicator.textContent = 'Error accessing sheet';
+                    indicator.textContent = 'Error accessing Reddit';
                     indicator.style.color = '#ff6b6b';
                 } else {
                     indicator.textContent = `Last updated: ${new Date().toLocaleTimeString()}`;
@@ -780,7 +788,6 @@ def index():
                 }
                 indicator.classList.remove('active');
                 
-                // Create burst of particles for new leads
                 if (data.new_leads_count > 0) {
                     createParticleBurst();
                 }
@@ -806,7 +813,6 @@ def index():
             }
         }
         
-        // Toggle uniques
         document.getElementById('toggleUniques').addEventListener('click', function() {
             showUniques = !showUniques;
             this.textContent = showUniques ? 'Show All' : 'Show Uniques';
@@ -816,34 +822,26 @@ def index():
             renderLeads(leadsToShow, false, null);
         });
         
-        // Sortable headers
         document.querySelectorAll('.feed-column-header').forEach(header => {
             header.addEventListener('click', function() {
                 const column = this.dataset.sort;
                 
-                // If clicking the same column, reverse direction
                 if (sortColumn === column) {
                     sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
                 } else {
-                    // New column, start with ascending
                     sortColumn = column;
                     sortDirection = 'asc';
                 }
                 
-                // Update header visuals
                 updateSortHeaders();
                 
-                // Re-render with sorted leads
                 const leadsToShow = showUniques ? getUniqueLeads(currentLeads) : currentLeads;
                 renderLeads(leadsToShow, false, null);
             });
         });
         
-        // Initial load
         fetchLeads();
         createParticles();
-        
-        // Auto-refresh every 30 seconds
         setInterval(fetchLeads, 30000);
     </script>
 </body>
@@ -854,18 +852,21 @@ def index():
 def api_leads():
     global last_leads, last_fetch_time
     
+    # Check if credentials are configured
+    if not REDDIT_CLIENT_ID or not REDDIT_CLIENT_SECRET:
+        return jsonify({
+            'leads': [],
+            'new_leads_count': 0,
+            'timestamp': datetime.now().isoformat(),
+            'error': 'Reddit API credentials not configured. Please set REDDIT_CLIENT_ID and REDDIT_CLIENT_SECRET environment variables.'
+        })
+    
     current_leads = fetch_leads()
     new_leads = get_new_leads(current_leads, last_leads)
     
-    # Check if sheet is accessible
     error_msg = None
     if not current_leads:
-        try:
-            response = requests.get(SHEET_URL, timeout=10)
-            if response.text.strip().startswith('<!DOCTYPE') or '<html' in response.text.lower():
-                error_msg = "Google Sheet is not publicly accessible. Please share it with 'Anyone with the link can view'"
-        except:
-            error_msg = "Unable to access Google Sheet. Please check the sharing settings."
+        error_msg = "No posts found. Check your subreddit configuration and Reddit API credentials."
     
     last_leads = current_leads
     last_fetch_time = datetime.now()
@@ -880,4 +881,3 @@ def api_leads():
 # For local development only
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
-
