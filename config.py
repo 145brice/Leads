@@ -1,0 +1,43 @@
+"""
+Configuration module for Contractor Leads SaaS
+"""
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+# Firebase
+FIREBASE_CREDENTIALS_PATH = os.getenv('FIREBASE_CREDENTIALS_PATH')
+FIREBASE_DATABASE_URL = os.getenv('FIREBASE_DATABASE_URL')
+
+# Stripe
+STRIPE_SECRET_KEY = os.getenv('STRIPE_SECRET_KEY')
+STRIPE_PUBLISHABLE_KEY = os.getenv('STRIPE_PUBLISHABLE_KEY')
+STRIPE_WEBHOOK_SECRET = os.getenv('STRIPE_WEBHOOK_SECRET')
+STRIPE_PRICE_ID = os.getenv('STRIPE_PRICE_ID')
+
+# Email
+SMTP_HOST = os.getenv('SMTP_HOST', 'smtp.gmail.com')
+SMTP_PORT = int(os.getenv('SMTP_PORT', 587))
+SMTP_USERNAME = os.getenv('SMTP_USERNAME')
+SMTP_PASSWORD = os.getenv('SMTP_PASSWORD')
+FROM_EMAIL = os.getenv('FROM_EMAIL')
+
+# Flask
+SECRET_KEY = os.getenv('SECRET_KEY')
+FLASK_ENV = os.getenv('FLASK_ENV', 'development')
+PORT = int(os.getenv('PORT', 5008))
+
+# AI Model
+HF_MODEL_NAME = os.getenv('HF_MODEL_NAME', 'distilbert-base-uncased-finetuned-sst-2-english')
+
+# Scraping
+SCRAPE_TIME = os.getenv('SCRAPE_TIME', '02:00')
+
+# County websites
+COUNTY_URLS = {
+    'nashville_davidson': 'https://www.nashville.gov/departments/codes/building-permits',
+    'rutherford': 'https://www.rutherfordcountytn.gov/building_codes',
+    'wilson': 'https://www.wilsoncountytn.gov/building',
+    'sumner': 'https://www.sumnercountytn.gov/building'
+}

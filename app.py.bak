@@ -1,0 +1,203 @@
+"""
+Flask web application - Dashboard and API
+"""
+from flask import Flask, render_template, request, redirect, url_for, session, jsonify, send_file
+from flask_cors import CORS
+import argparse
+from functools import wraps
+from datetime import datetime
+import os
+
+from firebase_backend import FirebaseBackend
+from stripe_payment import StripePayment
+from email_service import EmailService
+import config
+
+app = Flask(__name__)
+app.secret_key = config.SECRET_KEY
+CORS(app)
+
+# Initialize services
+firebase = FirebaseBackend()
+stripe_payment = StripePayment()
+email_service = EmailService()
+
+
+def login_required(f):
+    """Decorator to require login"""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'user_id' not in session:
+            return redirect(url_for('login'))
+        return f(*args, **kwargs)
+    return decorated_function
+
+
+# ==================== Routes ====================
+
+@app.route('/')
+def index():
+    """Landing page"""
+    return render_template('index.html')
+
+
+@app.route('/signup', methods=['GET', 'POST'])
+def signup():
+    """User signup"""
+    if request.method == 'POST':
+        email = request.form.get('email')
+        password = request.form.get('password')
+        
+        user = firebase.create_user(email, password)
+        if user and 'error' not in user:
+            session['user_id'] = user['uid']
+            session['email'] = user['email']
+            return redirect(url_for('index'))
+        else:
+            error_msg = user.get('error', 'Failed to create account') if user else 'Failed to create account'
+            return render_template('signup.html', error=error_msg)
+    
+    return render_template('signup.html')
+
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    """User login"""
+    if request.method == 'POST':
+        email = request.form.get('email')
+        password = request.form.get('password')
+        
+        # Verify with Firebase Auth (simplified - implement proper auth)
+        # For production, use Firebase SDK properly
+        session['email'] = email
+        return redirect(url_for('dashboard'))
+    
+    return render_template('login.html')
+
+
+@app.route('/logout')
+def logout():
+    """User logout"""
+    session.clear()
+    return redirect(url_for('index'))
+
+
+@app.route('/subscribe')
+@login_required
+def subscribe():
+    """Subscription page - redirect to main page for now"""
+    # TODO: Implement proper subscription flow with Stripe
+    return redirect(url_for('index'))
+
+
+@app.route('/dashboard')
+@login_required
+def dashboard():
+    """Main dashboard - shows daily leads"""
+    user_id = session.get('user_id')
+    user = firebase.get_user(user_id)
+    
+    # Get today's leads
+    date_str = datetime.now().strftime('%Y-%m-%d')
+    leads = firebase.get_daily_leads(date_str)
+    
+    return render_template('dashboard.html', 
+                          user=user,
+                          leads=leads,
+                          date=date_str)
+
+
+@app.route('/download_pdf/<date>')
+@login_required
+def download_pdf(date):
+    """Download PDF report for specific date"""
+    leads = firebase.get_daily_leads(date)
+    
+    if not leads:
+        return "No leads for this date", 404
+    
+    pdf_buffer = email_service.generate_leads_pdf(leads, date)
+    
+    return send_file(
+        pdf_buffer,
+        mimetype='application/pdf',
+        as_attachment=True,
+        download_name=f'contractor_leads_{date}.pdf'
+    )
+
+
+@app.route('/webhook/stripe', methods=['POST'])
+def stripe_webhook():
+    """Handle Stripe webhook events"""
+    payload = request.data
+    sig_header = request.headers.get('Stripe-Signature')
+    
+    event = stripe_payment.handle_webhook(payload, sig_header)
+    
+    if not event:
+        return 'Invalid signature', 400
+    
+    event_type = event['type']
+    event_data = event['data']
+    
+    # Handle different event types
+    if event_type == 'checkout.session.completed':
+        # Activate subscription
+        user_id = event_data.get('user_id')
+        firebase.update_user_subscription(
+            user_id,
+            event_data['customer_id'],
+            event_data['subscription_id'],
+            'active'
+        )
+    
+    elif event_type == 'customer.subscription.deleted':
+        # Deactivate subscription
+        # Find user by customer_id and update
+        pass
+    
+    return jsonify({'status': 'success'})
+
+
+@app.route('/success')
+@login_required
+def success():
+    """Payment success page"""
+    return render_template('success.html')
+
+@app.route('/buy/<plan>')
+@app.route('/success')
+@login_required
+def success():
+    """Payment success page"""
+    return render_template('success.html')
+@app.route('/success')
+@login_required
+def success():
+    """Payment success page"""
+    return render_template('success.html')
+
+@app.route('/buy/<plan>')
+def buy_plan(plan):
+    """Create Stripe checkout session for specific plan"""
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    
+    user_id = session['user_id']
+    user_email = session.get('email', '')
+    
+    # Create checkout session
+    session_data = stripe_payment.create_checkout_session(user_email, user_id)
+    if session_data:
+        return redirect(session_data['url'])
+    
+    return "Failed to create checkout session", 500
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--port', type=int, default=config.PORT)
+    args = parser.parse_args()
+    port = args.port
+    print(f"\n🚀 Starting Contractor Leads on http://localhost:{port}\n")
+    app.run(host='0.0.0.0', port=port, debug=(config.FLASK_ENV == 'development'))

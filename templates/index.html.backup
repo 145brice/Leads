@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Contractor Leads - Auto Feed Subscriptions</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 50%, #16213e 100%);
+            color: #fff;
+            overflow-x: hidden;
+            min-height: 100vh;
+            position: relative;
+        }
+        
+        /* Animated background particles */
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: 
+                radial-gradient(circle at 20% 50%, rgba(255, 215, 0, 0.1) 0%, transparent 50%),
+                radial-gradient(circle at 80% 80%, rgba(255, 215, 0, 0.08) 0%, transparent 50%),
+                radial-gradient(circle at 40% 20%, rgba(255, 215, 0, 0.06) 0%, transparent 50%);
+            animation: pulse 8s ease-in-out infinite;
+            pointer-events: none;
+            z-index: 0;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 0.5; }
+            50% { opacity: 1; }
+        }
+        
+        .container {
+            position: relative;
+            z-index: 1;
+            padding: 40px 20px;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        .site-header {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            z-index: 10;
+        }
+        
+        .nav-links {
+            display: flex;
+            gap: 15px;
+        }
+        
+        .nav-link {
+            padding: 12px 24px;
+            color: #fff;
+            text-decoration: none;
+            border-radius: 25px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            border: 2px solid rgba(255, 215, 0, 0.5);
+            background: rgba(255, 215, 0, 0.1);
+            display: inline-block;
+        }
+        
+        .nav-link:hover {
+            background: rgba(255, 215, 0, 0.2);
+            border-color: rgba(255, 215, 0, 0.8);
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(255, 215, 0, 0.3);
+        }
+        
+        .nav-link.primary {
+            background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%);
+            color: #000;
+            border: none;
+        }
+        
+        .nav-link.primary:hover {
+            transform: scale(1.05);
+            box-shadow: 0 5px 15px rgba(255, 215, 0, 0.3);
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 50px;
+            position: relative;
+        }
+        
+        .header h1 {
+            font-size: 3.5rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, #FFD700 0%, #FFA500 50%, #FFD700 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            text-shadow: 0 0 40px rgba(255, 215, 0, 0.5);
+            margin-bottom: 10px;
+            letter-spacing: -1px;
+            animation: shimmer 3s ease-in-out infinite;
+        }
+        
+        @keyframes shimmer {
+            0%, 100% { filter: brightness(1); }
+            50% { filter: brightness(1.3); }
+        }
+        
+        .header p {
+            font-size: 1.1rem;
+            color: rgba(255, 255, 255, 0.7);
+            font-weight: 300;
+        }
+        
+        .plans-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 30px;
+            margin-bottom: 50px;
+        }
+        
+        .plan-card {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 215, 0, 0.2);
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            transition: all 0.3s ease;
+            position: relative;
+        }
+        
+        .plan-card:hover {
+            transform: translateY(-5px);
+            border-color: rgba(255, 215, 0, 0.5);
+            box-shadow: 0 15px 40px rgba(255, 215, 0, 0.2);
+        }
+        
+        .plan-card.pro {
+            border-color: rgba(255, 215, 0, 0.5);
+            box-shadow: 0 8px 32px rgba(255, 215, 0, 0.3);
+        }
+        
+        .plan-card.pro::before {
+            content: 'MOST POPULAR';
+            position: absolute;
+            top: -10px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%);
+            color: #000;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: bold;
+            letter-spacing: 1px;
+        }
+        
+        .plan-header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .plan-name {
+            font-size: 28px;
+            font-weight: bold;
+            color: #FFD700;
+            margin-bottom: 10px;
+        }
+        
+        .plan-price {
+            font-size: 48px;
+            font-weight: bold;
+            color: #fff;
+            margin-bottom: 5px;
+        }
+        
+        .plan-price span {
+            font-size: 18px;
+            color: rgba(255, 255, 255, 0.7);
+        }
+        
+            font-size: 14px;
+            color: rgba(255, 255, 255, 0.6);
+            margin-bottom: 20px;
+        }
+        
+        .plan-features {
+            list-style: none;
+            margin-bottom: 30px;
+        }
+        
+        .plan-features li {
+            padding: 10px 0;
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 16px;
+        }
+        
+        .plan-features li:before {
+            content: "✓ ";
+            color: #10b981;
+            font-weight: bold;
+            margin-right: 10px;
+        }
+        
+        .subscribe-button {
+            width: auto;
+            padding: 18px 40px;
+            margin: 20px auto 0;
+            display: block;
+            background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%);
+            color: #000;
+            border: none;
+            border-radius: 12px;
+            font-size: 20px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-align: center;
+            box-shadow: 0 4px 15px rgba(255, 215, 0, 0.3);
+        }
+        
+        .subscribe-button:hover {
+            transform: scale(1.02);
+            box-shadow: 0 5px 20px rgba(255, 215, 0, 0.4);
+        }
+        
+        .subscribe-button:active {
+            transform: scale(0.98);
+        }
+        
+        .info-banner {
+            background: rgba(0, 0, 0, 0.4);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 215, 0, 0.3);
+            border-radius: 25px;
+            padding: 30px;
+            text-align: center;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+        }
+        
+        .info-banner h2 {
+            color: #FFD700;
+            margin-bottom: 15px;
+        }
+        
+        .info-banner p {
+            color: rgba(255, 255, 255, 0.7);
+            line-height: 1.8;
+            font-size: 16px;
+        }
+        
+        .success-message {
+            display: none;
+            background: #10b981;
+            color: white;
+            padding: 20px;
+            border-radius: 12px;
+            margin-bottom: 30px;
+            text-align: center;
+        }
+        
+        .success-message.show {
+            display: block;
+            animation: slideIn 0.5s ease;
+        }
+        
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .golden-particles {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 2;
+            overflow: hidden;
+        }
+        
+        .particle {
+            position: absolute;
+            width: 4px;
+            height: 4px;
+            background: #FFD700;
+            border-radius: 50%;
+            opacity: 0;
+            animation: fall 3s linear infinite;
+            box-shadow: 0 0 10px #FFD700;
+        }
+        
+        @keyframes fall {
+            0% {
+                opacity: 1;
+                transform: translateY(-100px) translateX(0);
+            }
+            100% {
+                opacity: 0;
+                transform: translateY(100vh) translateX(50px);
+            }
+        }
+        
+        @media (max-width: 768px) {
+            .header h1 {
+                font-size: 2.5rem;
+            }
+            
+            .cities-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="golden-particles" id="particles"></div>
+    
+    <div class="container">
+        <header class="site-header">
+            <nav class="nav-links">
+                {% if user %}
+                <a href="/dashboard" class="nav-link">Dashboard</a>
+                <a href="/logout" class="nav-link">Logout</a>
+                {% else %}
+                <a href="/login" class="nav-link">Login</a>
+                <a href="/signup" class="nav-link primary">Sign Up</a>
+                {% endif %}
+            </nav>            <p>Fresh Building Permits · Daily Updates · Choose Your City</p>
+        </div>
+        
+        <div id="successMessage" class="success-message">
+            <h3>🎉 Subscription Activated!</h3>
+            <p>Your auto-feed is now running. Expect your first permits at 5:30 AM tomorrow.</p>
+        </div>
+        
+        <div class="plans-grid">
+            <!-- Nashville -->
+            <div class="plan-card">
+                <div class="plan-header">
+                    <div class="plan-name">Nashville</div>
+                    <div class="plan-price">$49.99<span>/month</span></div>
+                </div>
+                
+                <ul class="plan-features">
+                    <li>Access to Nashville-Davidson County permits</li>
+                    <li>Sorting by city or date</li>
+                    <li>Unlimited permit pulls</li>
+                    <li>Daily updates at 5:31 AM</li>
+                    <li>CSV dumps & RSS feeds</li>
+                </ul>
+                
+                <button class="subscribe-button" onclick="buyPlan('Nashville-Davidson')">
+                    Subscribe to Nashville
+                </button>
+            </div>
+            
+            <!-- Austin -->
+            <div class="plan-card">
+                <div class="plan-header">
+                    <div class="plan-name">Austin</div>
+                    <div class="plan-price">$49.99<span>/month</span></div>
+                </div>
+                
+                <ul class="plan-features">
+                    <li>Access to Austin-Travis County permits</li>
+                    <li>Sorting by city or date</li>
+                    <li>Unlimited permit pulls</li>
+                    <li>Daily updates at 5:31 AM</li>
+                    <li>CSV dumps & RSS feeds</li>
+                </ul>
+                
+                <button class="subscribe-button" onclick="buyPlan('Austin-Travis')">
+                    Subscribe to Austin
+                </button>
+            </div>
+            
+            <!-- San Antonio -->
+            <div class="plan-card">
+                <div class="plan-header">
+                    <div class="plan-name">San Antonio</div>
+                    <div class="plan-price">$49.99<span>/month</span></div>
+                </div>
+                
+                <ul class="plan-features">
+                    <li>Access to San Antonio-Bexar County permits</li>
+                    <li>Sorting by city or date</li>
+                    <li>Unlimited permit pulls</li>
+                    <li>Daily updates at 5:31 AM</li>
+                    <li>CSV dumps & RSS feeds</li>
+                </ul>
+                
+                <button class="subscribe-button" onclick="buyPlan('San Antonio-Bexar')">
+                    Subscribe to San Antonio
+                </button>
+            </div>
+            
+            <!-- Chattanooga -->
+            <div class="plan-card">
+                <div class="plan-header">
+                    <div class="plan-name">Chattanooga</div>
+                    <div class="plan-price">$49.99<span>/month</span></div>
+                </div>
+                
+                <ul class="plan-features">
+                    <li>Access to Chattanooga-Hamilton County permits</li>
+                    <li>Sorting by city or date</li>
+                    <li>Unlimited permit pulls</li>
+                    <li>Daily updates at 5:31 AM</li>
+                    <li>CSV dumps & RSS feeds</li>
+                </ul>
+                
+                <button class="subscribe-button" onclick="buyPlan('Chattanooga-Hamilton')">
+                    Subscribe to Chattanooga
+                </button>
+            </div>
+        </div>
+        
+        <div class="info-banner">
+            <h2>🚀 How It Works</h2>
+            <p>
+                <strong>1. Subscribe</strong> to any city<br>
+                <strong>2. Auto-scraper kicks in</strong> – runs 4x daily (5:30 AM, 9:30 AM, 1:30 PM, 5:30 PM)<br>
+                <strong>3. Get fresh permits</strong> – daily CSV dump at 5:31 AM + RSS feed for CRM<br>
+                <strong>4. Zero duplicates</strong> – we track everything, you get only NEW leads<br>
+                <strong>5. Cancel anytime</strong> – no contracts, no hassle
+            </p>
+        </div>
+    </div>
+    
+    <script>
+        // Create golden particles
+        function createParticles() {
+            const particlesContainer = document.getElementById('particles');
+            for (let i = 0; i < 20; i++) {
+                const particle = document.createElement('div');
+                particle.className = 'particle';
+                particle.style.left = Math.random() * 100 + '%';
+                particle.style.animationDelay = Math.random() * 3 + 's';
+                particle.style.animationDuration = (Math.random() * 2 + 2) + 's';
+                particlesContainer.appendChild(particle);
+            }
+        }
+        
+        function buyPlan(plan) {
+            window.location.href = '/buy/' + plan;
+        }
+        
+        // Check for successful payment
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.get('success')) {
+            document.getElementById('successMessage').classList.add('show');
+            
+            // Remove query params
+            window.history.replaceState({}, document.title, window.location.pathname);
+        }
+        
+        // Initialize particles
+        createParticles();
+    </script>
+</body>
+</html>
