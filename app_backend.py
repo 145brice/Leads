@@ -72,6 +72,18 @@ def blur_address(address):
             return f'<span class="blur">[Address Locked]</span>'
 
 LEADS = load_leads()
+MARKET_COUNTIES = [
+    ('tennessee', 'nashville'),
+    ('tennessee', 'chattanooga'),
+    ('texas', 'travis'),
+    ('texas', 'bexar'),
+]
+
+def get_market_count(state_key, county_key):
+    return len(LEADS.get(state_key, {}).get(county_key, []))
+
+def get_total_market_leads():
+    return sum(get_market_count(state_key, county_key) for state_key, county_key in MARKET_COUNTIES)
 
 # Initialize database on startup
 with app.app_context():
@@ -81,6 +93,13 @@ with app.app_context():
 def index():
     user = auth.get_current_user()
     user_email = user['email'] if user else None
+    market_counts = {
+        'nashville': get_market_count('tennessee', 'nashville'),
+        'chattanooga': get_market_count('tennessee', 'chattanooga'),
+        'travis': get_market_count('texas', 'travis'),
+        'bexar': get_market_count('texas', 'bexar'),
+    }
+    total_market_leads = get_total_market_leads()
     
     return render_template_string("""
     <!DOCTYPE html>
@@ -148,7 +167,7 @@ def index():
                 <div class="hero-content">
                     <div class="badge">
                         <span class="badge-dot"></span>
-                        10,952+ Active Leads
+                        {{ total_market_leads }}+ Active Leads
                     </div>
                     <h1>Daily Construction Permits</h1>
                     <p class="subtitle">
@@ -171,11 +190,11 @@ def index():
                         <div class="counties">
                             <a href="/county/tennessee/nashville" class="county-card">
                                 <div class="county-header"><span class="county-icon">🎵</span><div class="county-info"><div class="county-city">Nashville</div><div class="county-name">Davidson County</div></div></div>
-                                <div class="county-stats"><div class="stat"><div class="stat-label">Leads</div><div class="stat-value">272</div></div><span class="arrow">→</span></div>
+                                <div class="county-stats"><div class="stat"><div class="stat-label">Leads</div><div class="stat-value">{{ market_counts.nashville }}</div></div><span class="arrow">→</span></div>
                             </a>
                             <a href="/county/tennessee/chattanooga" class="county-card">
                                 <div class="county-header"><span class="county-icon">🏔️</span><div class="county-info"><div class="county-city">Chattanooga</div><div class="county-name">Hamilton County</div></div></div>
-                                <div class="county-stats"><div class="stat"><div class="stat-label">Leads</div><div class="stat-value">943</div></div><span class="arrow">→</span></div>
+                                <div class="county-stats"><div class="stat"><div class="stat-label">Leads</div><div class="stat-value">{{ market_counts.chattanooga }}</div></div><span class="arrow">→</span></div>
                             </a>
                         </div>
                     </div>
@@ -184,11 +203,11 @@ def index():
                         <div class="counties">
                             <a href="/county/texas/travis" class="county-card">
                                 <div class="county-header"><span class="county-icon">🎸</span><div class="county-info"><div class="county-city">Austin</div><div class="county-name">Travis County</div></div></div>
-                                <div class="county-stats"><div class="stat"><div class="stat-label">Leads</div><div class="stat-value">5,000</div></div><span class="arrow">→</span></div>
+                                <div class="county-stats"><div class="stat"><div class="stat-label">Leads</div><div class="stat-value">{{ "{:,}".format(market_counts.travis) }}</div></div><span class="arrow">→</span></div>
                             </a>
                             <a href="/county/texas/bexar" class="county-card">
                                 <div class="county-header"><span class="county-icon">🌮</span><div class="county-info"><div class="county-city">San Antonio</div><div class="county-name">Bexar County</div></div></div>
-                                <div class="county-stats"><div class="stat"><div class="stat-label">Leads</div><div class="stat-value">4,695</div></div><span class="arrow">→</span></div>
+                                <div class="county-stats"><div class="stat"><div class="stat-label">Leads</div><div class="stat-value">{{ "{:,}".format(market_counts.bexar) }}</div></div><span class="arrow">→</span></div>
                             </a>
                         </div>
                     </div>
@@ -197,7 +216,7 @@ def index():
         </div>
     </body>
     </html>
-    """, user_email=user_email)
+    """, user_email=user_email, market_counts=market_counts, total_market_leads=f"{total_market_leads:,}")
 
 @app.route('/signup', methods=['GET', 'POST'])
 def signup():
@@ -221,10 +240,10 @@ def signup():
     
     # GET request - show signup form
     counties_data = [
-        {'state': 'Tennessee', 'city': 'Nashville', 'county': 'Davidson County', 'emoji': '🎵', 'state_key': 'tennessee', 'county_key': 'nashville', 'count': 272},
-        {'state': 'Tennessee', 'city': 'Chattanooga', 'county': 'Hamilton County', 'emoji': '🏔️', 'state_key': 'tennessee', 'county_key': 'chattanooga', 'count': 943},
-        {'state': 'Texas', 'city': 'Austin', 'county': 'Travis County', 'emoji': '🎸', 'state_key': 'texas', 'county_key': 'travis', 'count': 5000},
-        {'state': 'Texas', 'city': 'San Antonio', 'county': 'Bexar County', 'emoji': '🌮', 'state_key': 'texas', 'county_key': 'bexar', 'count': 4695},
+        {'state': 'Tennessee', 'city': 'Nashville', 'county': 'Davidson County', 'emoji': '🎵', 'state_key': 'tennessee', 'county_key': 'nashville', 'count': get_market_count('tennessee', 'nashville')},
+        {'state': 'Tennessee', 'city': 'Chattanooga', 'county': 'Hamilton County', 'emoji': '🏔️', 'state_key': 'tennessee', 'county_key': 'chattanooga', 'count': get_market_count('tennessee', 'chattanooga')},
+        {'state': 'Texas', 'city': 'Austin', 'county': 'Travis County', 'emoji': '🎸', 'state_key': 'texas', 'county_key': 'travis', 'count': get_market_count('texas', 'travis')},
+        {'state': 'Texas', 'city': 'San Antonio', 'county': 'Bexar County', 'emoji': '🌮', 'state_key': 'texas', 'county_key': 'bexar', 'count': get_market_count('texas', 'bexar')},
     ]
     
     cards_html = ""
